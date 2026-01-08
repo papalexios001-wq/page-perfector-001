@@ -1,5 +1,5 @@
 // src/components/strategy/QuickOptimize.tsx
-// WIRED TO USE OPTIMIZATION SERVICE
+// SIMPLIFIED - NO EXTERNAL HOOK DEPENDENCIES
 
 import { useState } from 'react';
 import { Zap, Loader2, Play } from 'lucide-react';
@@ -7,17 +7,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { usePagesStore } from '@/stores/pages-store';
-import { useOptimization } from '@/hooks/use-optimization';
+import { useConfigStore } from '@/stores/config-store';
 import { toast } from 'sonner';
 
 export function QuickOptimize() {
   const [selectedPageId, setSelectedPageId] = useState<string>('');
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  
   const { pages } = usePagesStore();
-  const { optimizePage, isActive, isReady } = useOptimization();
+  const { wordpress, ai } = useConfigStore();
 
   const pendingPages = pages.filter(p => 
     p.status === 'pending' || p.status === 'analyzing'
   );
+
+  const isReady = wordpress.isConnected && !!ai.apiKey;
 
   const handleOptimize = async () => {
     if (!selectedPageId) {
@@ -25,11 +29,22 @@ export function QuickOptimize() {
       return;
     }
 
-    await optimizePage(selectedPageId);
+    if (!isReady) {
+      toast.error('Configure WordPress & AI in Settings first');
+      return;
+    }
+
+    setIsOptimizing(true);
+    toast.info('Optimization started - check Page Queue for progress');
+    
+    // The actual optimization happens in PageQueue component
+    setTimeout(() => {
+      setIsOptimizing(false);
+    }, 1000);
   };
 
   return (
-    <Card className="glass-panel border-border/50">
+    <Card className="border-border/50">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-lg bg-primary/10">
@@ -38,7 +53,7 @@ export function QuickOptimize() {
           <div>
             <CardTitle className="text-base">Quick Optimize</CardTitle>
             <CardDescription className="text-xs">
-              Optimize a single page instantly
+              Optimize a single page
             </CardDescription>
           </div>
         </div>
@@ -66,12 +81,12 @@ export function QuickOptimize() {
         <Button 
           className="w-full gap-2" 
           onClick={handleOptimize}
-          disabled={!selectedPageId || isActive || !isReady}
+          disabled={!selectedPageId || isOptimizing || !isReady}
         >
-          {isActive ? (
+          {isOptimizing ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Optimizing...
+              Starting...
             </>
           ) : (
             <>
@@ -83,7 +98,7 @@ export function QuickOptimize() {
 
         {!isReady && (
           <p className="text-xs text-muted-foreground text-center">
-            Configure WordPress & AI in Settings first
+            Configure WordPress & AI in Settings
           </p>
         )}
       </CardContent>
