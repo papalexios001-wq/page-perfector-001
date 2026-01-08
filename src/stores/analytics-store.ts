@@ -18,6 +18,10 @@ export interface SessionStats {
   totalAiCostUsd: number;
   averageJobDuration: number;
   successRate: number;
+  pagesOptimized: number;
+  averageScoreImprovement: number;
+  totalWordCount: number;
+  startTime: string;
 }
 
 export interface ScoreDistribution {
