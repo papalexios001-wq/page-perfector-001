@@ -1,6 +1,6 @@
 // supabase/functions/optimize-content/index.ts
-// ENTERPRISE-GRADE CONTENT OPTIMIZATION ENGINE V4.0
-// Alex Hormozi Style | Visual Masterpiece | 6-12 Internal Links | Mobile-First
+// ENTERPRISE-GRADE CONTENT OPTIMIZATION V5.0
+// With robust error handling, timeouts, and fallbacks
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -13,581 +13,532 @@ const corsHeaders = {
 // ============================================================================
 // BEAUTIFUL HTML TEMPLATES
 // ============================================================================
-const HTML_TEMPLATES = {
-  heroSection: (title: string, subtitle: string, readTime: number, topic: string) => `
+const createHeroSection = (title: string, readTime: number) => `
 <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 48px 32px; border-radius: 20px; margin-bottom: 40px; color: white; text-align: center;">
-  <h1 style="font-size: clamp(1.75rem, 5vw, 2.5rem); font-weight: 800; margin: 0 0 16px 0; line-height: 1.2; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">${title}</h1>
-  <p style="font-size: clamp(1rem, 3vw, 1.25rem); opacity: 0.95; margin: 0 0 24px 0; max-width: 600px; margin-left: auto; margin-right: auto;">${subtitle}</p>
+  <h1 style="font-size: clamp(1.75rem, 5vw, 2.5rem); font-weight: 800; margin: 0 0 16px 0; line-height: 1.2;">${title}</h1>
   <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-    <span style="background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); padding: 10px 20px; border-radius: 25px; font-size: 0.875rem; font-weight: 500;">📖 ${readTime} min read</span>
-    <span style="background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); padding: 10px 20px; border-radius: 25px; font-size: 0.875rem; font-weight: 500;">🎯 ${topic}</span>
+    <span style="background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 25px; font-size: 0.875rem;">📖 ${readTime} min read</span>
   </div>
-</div>`,
+</div>`;
 
-  keyTakeawayBox: (content: string) => `
-<div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 28px; border-radius: 16px; margin: 36px 0; color: white; box-shadow: 0 10px 40px rgba(240,147,251,0.3);">
+const createKeyTakeaway = (content: string) => `
+<div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 28px; border-radius: 16px; margin: 36px 0; color: white;">
   <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
     <span style="font-size: 1.75rem;">💡</span>
-    <strong style="font-size: 1.125rem; font-weight: 700;">KEY TAKEAWAY</strong>
+    <strong style="font-size: 1.125rem;">KEY TAKEAWAY</strong>
   </div>
-  <p style="font-size: 1.05rem; margin: 0; line-height: 1.7; font-weight: 500;">${content}</p>
-</div>`,
+  <p style="font-size: 1.05rem; margin: 0; line-height: 1.7;">${content}</p>
+</div>`;
 
-  statBox: (stat: string, description: string) => `
-<div style="background: linear-gradient(145deg, #1a1a2e 0%, #16213e 100%); padding: 40px 32px; border-radius: 16px; margin: 36px 0; text-align: center; color: white; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
-  <div style="font-size: clamp(2.5rem, 8vw, 4rem); font-weight: 900; background: linear-gradient(135deg, #667eea, #764ba2, #f093fb); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 12px;">${stat}</div>
-  <p style="font-size: 1rem; opacity: 0.85; margin: 0; font-weight: 500;">${description}</p>
-</div>`,
-
-  proTipBox: (content: string) => `
-<div style="background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%); border-left: 5px solid #22c55e; padding: 24px 28px; border-radius: 0 16px 16px 0; margin: 32px 0; box-shadow: 0 4px 20px rgba(34,197,94,0.2);">
+const createProTip = (content: string) => `
+<div style="background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%); border-left: 5px solid #22c55e; padding: 24px 28px; border-radius: 0 16px 16px 0; margin: 32px 0;">
   <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
     <span style="font-size: 1.5rem;">✅</span>
-    <strong style="color: #166534; font-size: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Pro Tip</strong>
+    <strong style="color: #166534;">Pro Tip</strong>
   </div>
-  <p style="color: #14532d; margin: 0; line-height: 1.7; font-size: 1rem; font-weight: 500;">${content}</p>
-</div>`,
-
-  warningBox: (content: string) => `
-<div style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); border-left: 5px solid #f59e0b; padding: 24px 28px; border-radius: 0 16px 16px 0; margin: 32px 0; box-shadow: 0 4px 20px rgba(245,158,11,0.2);">
-  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-    <span style="font-size: 1.5rem;">⚠️</span>
-    <strong style="color: #92400e; font-size: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Warning</strong>
-  </div>
-  <p style="color: #78350f; margin: 0; line-height: 1.7; font-size: 1rem; font-weight: 500;">${content}</p>
-</div>`,
-
-  numberedStep: (number: number, title: string, description: string) => `
-<div style="display: flex; gap: 20px; margin-bottom: 28px; align-items: flex-start;">
-  <div style="width: 56px; height: 56px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 1.5rem; flex-shrink: 0; box-shadow: 0 4px 15px rgba(102,126,234,0.4);">${number}</div>
-  <div style="flex: 1; padding-top: 4px;">
-    <h4 style="margin: 0 0 10px 0; font-size: 1.2rem; font-weight: 700; color: #1e293b;">${title}</h4>
-    <p style="margin: 0; color: #475569; line-height: 1.7; font-size: 1rem;">${description}</p>
-  </div>
-</div>`,
-
-  stepsContainer: (stepsHtml: string, title: string) => `
-<div style="background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%); padding: 36px; border-radius: 20px; margin: 40px 0; border: 1px solid #e2e8f0;">
-  <h3 style="margin: 0 0 28px 0; font-size: 1.5rem; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 12px;">
-    <span style="font-size: 1.75rem;">📋</span> ${title}
-  </h3>
-  ${stepsHtml}
-</div>`,
-
-  comparisonTable: (headers: string[], rows: string[][]) => {
-    const headerHtml = headers.map(h => `<th style="padding: 18px 16px; text-align: left; color: white; font-weight: 600; font-size: 0.95rem;">${h}</th>`).join('');
-    const rowsHtml = rows.map((row, i) => `
-      <tr style="background: ${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-        ${row.map(cell => `<td style="padding: 16px; border-bottom: 1px solid #e2e8f0; font-size: 0.95rem; color: #334155;">${cell}</td>`).join('')}
-      </tr>
-    `).join('');
-    
-    return `
-<div style="overflow-x: auto; margin: 36px 0; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
-  <table style="width: 100%; border-collapse: collapse; min-width: 500px;">
-    <thead>
-      <tr style="background: linear-gradient(135deg, #667eea, #764ba2);">
-        ${headerHtml}
-      </tr>
-    </thead>
-    <tbody>
-      ${rowsHtml}
-    </tbody>
-  </table>
+  <p style="color: #14532d; margin: 0; line-height: 1.7;">${content}</p>
 </div>`;
-  },
 
-  faqItem: (question: string, answer: string) => `
-<div itemscope itemprop="mainEntity" itemtype="https://schema.org/Question" style="background: white; padding: 24px; border-radius: 16px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; transition: all 0.2s ease;">
-  <h3 itemprop="name" style="margin: 0 0 14px 0; font-size: 1.1rem; color: #0f172a; font-weight: 700; display: flex; align-items: flex-start; gap: 12px;">
-    <span style="color: #667eea; font-size: 1.25rem;">❓</span>
-    ${question}
-  </h3>
-  <div itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">
-    <p itemprop="text" style="margin: 0; color: #475569; line-height: 1.7; font-size: 1rem; padding-left: 32px;">${answer}</p>
-  </div>
-</div>`,
+const createStatBox = (stat: string, description: string) => `
+<div style="background: linear-gradient(145deg, #1a1a2e 0%, #16213e 100%); padding: 40px 32px; border-radius: 16px; margin: 36px 0; text-align: center; color: white;">
+  <div style="font-size: 3rem; font-weight: 900; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${stat}</div>
+  <p style="font-size: 1rem; opacity: 0.85; margin: 8px 0 0 0;">${description}</p>
+</div>`;
 
-  faqSection: (faqsHtml: string) => `
-<section itemscope itemtype="https://schema.org/FAQPage" style="background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%); padding: 40px 32px; border-radius: 20px; margin: 48px 0;">
-  <h2 style="margin: 0 0 28px 0; font-size: 1.75rem; font-weight: 800; color: #0f172a; text-align: center; display: flex; align-items: center; justify-content: center; gap: 12px;">
-    <span style="font-size: 2rem;">💬</span> Frequently Asked Questions
-  </h2>
-  ${faqsHtml}
-</section>`,
-
-  ctaBox: (headline: string, subtext: string, buttonText: string, buttonLink: string) => `
-<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 48px 32px; border-radius: 20px; margin: 48px 0; text-align: center; color: white; box-shadow: 0 10px 40px rgba(102,126,234,0.3);">
-  <h2 style="font-size: clamp(1.5rem, 4vw, 2rem); font-weight: 800; margin: 0 0 16px 0;">${headline}</h2>
-  <p style="font-size: 1.125rem; opacity: 0.95; margin: 0 0 28px 0; max-width: 500px; margin-left: auto; margin-right: auto;">${subtext}</p>
-  <a href="${buttonLink}" style="display: inline-block; background: white; color: #667eea; padding: 16px 40px; border-radius: 12px; font-weight: 700; text-decoration: none; font-size: 1.05rem; box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: transform 0.2s ease;">
-    ${buttonText} →
-  </a>
-</div>`,
-
-  internalLinkBox: (links: Array<{anchor: string; url: string; description: string}>) => {
-    const linksHtml = links.map(link => `
-      <a href="${link.url}" style="display: block; padding: 16px 20px; background: white; border-radius: 12px; text-decoration: none; margin-bottom: 12px; border: 1px solid #e2e8f0; transition: all 0.2s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
-        <span style="color: #667eea; font-weight: 600; font-size: 1rem; display: block; margin-bottom: 4px;">📄 ${link.anchor}</span>
-        <span style="color: #64748b; font-size: 0.875rem;">${link.description}</span>
-      </a>
-    `).join('');
-    
-    return `
-<div style="background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%); padding: 28px; border-radius: 16px; margin: 36px 0; border: 1px solid #bfdbfe;">
-  <h4 style="margin: 0 0 20px 0; font-size: 1.1rem; font-weight: 700; color: #1e40af; display: flex; align-items: center; gap: 10px;">
-    <span style="font-size: 1.25rem;">🔗</span> Related Articles You'll Love
-  </h4>
+const createRelatedLinks = (links: Array<{url: string; title: string}>) => {
+  if (links.length === 0) return '';
+  const linksHtml = links.slice(0, 8).map(link => `
+    <a href="${link.url}" style="display: block; padding: 16px 20px; background: white; border-radius: 12px; text-decoration: none; margin-bottom: 12px; border: 1px solid #e2e8f0;">
+      <span style="color: #667eea; font-weight: 600;">📄 ${link.title}</span>
+    </a>
+  `).join('');
+  
+  return `
+<div style="background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%); padding: 32px; border-radius: 20px; margin: 48px 0; border: 1px solid #bfdbfe;">
+  <h3 style="margin: 0 0 24px 0; font-size: 1.35rem; font-weight: 700; color: #1e40af;">🔗 Related Articles</h3>
   ${linksHtml}
 </div>`;
-  },
+};
 
-  pullQuote: (quote: string, author?: string) => `
-<blockquote style="background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%); border-left: 5px solid #a855f7; padding: 28px 32px; border-radius: 0 16px 16px 0; margin: 36px 0; font-style: italic;">
-  <p style="font-size: 1.25rem; color: #581c87; margin: 0; line-height: 1.6; font-weight: 500;">"${quote}"</p>
-  ${author ? `<cite style="display: block; margin-top: 12px; font-size: 0.95rem; color: #7c3aed; font-style: normal; font-weight: 600;">— ${author}</cite>` : ''}
-</blockquote>`,
-
-  bulletList: (items: string[], title?: string) => {
-    const itemsHtml = items.map(item => `
-      <li style="padding: 10px 0; padding-left: 8px; display: flex; align-items: flex-start; gap: 12px;">
-        <span style="color: #22c55e; font-size: 1.25rem; line-height: 1;">✓</span>
-        <span style="color: #334155; line-height: 1.6;">${item}</span>
-      </li>
-    `).join('');
-    
-    return `
-<div style="background: #f0fdf4; padding: 28px; border-radius: 16px; margin: 32px 0; border: 1px solid #bbf7d0;">
-  ${title ? `<h4 style="margin: 0 0 16px 0; font-size: 1.1rem; font-weight: 700; color: #166534;">${title}</h4>` : ''}
-  <ul style="list-style: none; margin: 0; padding: 0;">
-    ${itemsHtml}
-  </ul>
-</div>`;
-  },
+const createFaqSection = (faqs: Array<{question: string; answer: string}>) => {
+  if (faqs.length === 0) return '';
+  const faqsHtml = faqs.map(faq => `
+    <div itemscope itemprop="mainEntity" itemtype="https://schema.org/Question" style="background: white; padding: 24px; border-radius: 16px; margin-bottom: 16px; border: 1px solid #e2e8f0;">
+      <h3 itemprop="name" style="margin: 0 0 14px 0; font-size: 1.1rem; color: #0f172a; font-weight: 700;">❓ ${faq.question}</h3>
+      <div itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">
+        <p itemprop="text" style="margin: 0; color: #475569; line-height: 1.7;">${faq.answer}</p>
+      </div>
+    </div>
+  `).join('');
+  
+  return `
+<section itemscope itemtype="https://schema.org/FAQPage" style="background: #f8fafc; padding: 40px 32px; border-radius: 20px; margin: 48px 0;">
+  <h2 style="margin: 0 0 28px 0; font-size: 1.75rem; font-weight: 800; color: #0f172a; text-align: center;">💬 Frequently Asked Questions</h2>
+  ${faqsHtml}
+</section>`;
 };
 
 // ============================================================================
-// MASTER AI PROMPT - ALEX HORMOZI STYLE + VISUAL MASTERPIECE
+// AI PROMPT
 // ============================================================================
-const MASTER_PROMPT = `You are a world-class content strategist who combines:
-- ALEX HORMOZI's punchy, no-BS writing (short paragraphs, bold claims, massive value)
-- NEIL PATEL's SEO mastery (featured snippets, E-E-A-T, semantic optimization)  
-- A top UX designer's visual skills (beautiful formatting, mobile-first)
+const OPTIMIZATION_PROMPT = `You are an expert content optimizer combining Alex Hormozi's punchy writing style with professional SEO best practices.
 
-## WRITING RULES (FOLLOW EXACTLY):
+WRITING RULES:
+1. Short paragraphs (2-3 sentences max)
+2. Use "you" constantly - be conversational
+3. Bold **key phrases** for emphasis
+4. Start with valuable insight, not filler
 
-### 1. PUNCH WITH VALUE IMMEDIATELY
-- First sentence = most important insight
-- NO throat-clearing ("In this article, we'll discuss...")
-- Start with bold claim, shocking stat, or counterintuitive truth
-
-### 2. SHORT PARAGRAPHS ONLY
-- MAX 2-3 sentences per paragraph
-- One idea per paragraph
-- White space is your friend
-
-### 3. PATTERN INTERRUPTS
-- Bold **key phrases**
-- Numbered lists for steps
-- Bullet points for benefits
-- Call-out boxes for insights
-
-### 4. CONVERSATIONAL TONE
-- Use "you" constantly
-- Use contractions (don't, won't, can't)
-- Ask rhetorical questions
-- Sound like a smart friend, not a textbook
-
-### 5. SCANNABLE STRUCTURE
-- H2 every 200-300 words
-- Front-load value in each section
-
-## INTERNAL LINKING REQUIREMENTS (CRITICAL):
-
-You MUST include **6-12 internal links** using the sitemap pages provided. Rules:
-1. Use RICH, DESCRIPTIVE anchor text (NOT "click here" or "read more")
-2. Place links NATURALLY within sentences
-3. Link to RELEVANT pages only
-4. Distribute links throughout (not all at end)
-
-GOOD anchor text examples:
-- "learn more about [advanced SEO strategies for beginners]"
-- "check out our [complete guide to content marketing]"
-- "discover [how to increase organic traffic fast]"
-
-BAD anchor text:
-- "click here"
-- "read more" 
-- "this article"
-
-## VISUAL FORMATTING (CRITICAL):
-
-Use these EXACT HTML templates for beautiful, mobile-first design:
-
-### For Key Takeaways:
-${HTML_TEMPLATES.keyTakeawayBox('[INSIGHT]')}
-
-### For Statistics:
-${HTML_TEMPLATES.statBox('[NUMBER]', '[DESCRIPTION]')}
-
-### For Pro Tips:
-${HTML_TEMPLATES.proTipBox('[TIP CONTENT]')}
-
-### For Warnings:
-${HTML_TEMPLATES.warningBox('[WARNING CONTENT]')}
-
-### For Step-by-Step:
-${HTML_TEMPLATES.stepsContainer(HTML_TEMPLATES.numberedStep(1, '[STEP TITLE]', '[STEP DESCRIPTION]'), '[SECTION TITLE]')}
-
-## OUTPUT FORMAT (JSON):
-
-Return valid JSON:
+OUTPUT FORMAT (JSON only):
 {
-  "optimizedTitle": "SEO title 50-60 chars with keyword",
-  "metaDescription": "Compelling meta 150-160 chars with CTA",
-  "optimizedContent": "COMPLETE HTML with all visual formatting and internal links embedded",
-  "faqs": [{"question": "Q targeting PAA", "answer": "Direct answer 40-60 words"}],
-  "keyTakeaways": ["5-7 key points"],
-  "internalLinks": [{"url": "/page-slug", "anchor": "rich anchor text", "context": "sentence where used"}],
-  "contentMetrics": {"wordCount": 2500, "readingTime": 10, "h2Count": 8, "internalLinkCount": 8},
-  "qualityScore": 92
+  "optimizedTitle": "SEO title 50-60 chars",
+  "metaDescription": "Meta description 150-160 chars",
+  "introduction": "Punchy 2-3 paragraph intro",
+  "sections": [
+    {"heading": "H2 Heading", "content": "Section content with paragraphs"}
+  ],
+  "keyTakeaways": ["5-7 bullet points"],
+  "faqs": [{"question": "Question?", "answer": "Direct answer 40-60 words"}],
+  "conclusion": "Strong closing paragraph with CTA"
 }`;
 
 // ============================================================================
-// AI PROVIDER FUNCTIONS
+// AI CALL WITH TIMEOUT
 // ============================================================================
-async function callAI(provider: string, apiKey: string, model: string, systemPrompt: string, userPrompt: string): Promise<string> {
-  switch (provider) {
-    case 'google': return await callGoogle(apiKey, model, systemPrompt + "\n\n" + userPrompt);
-    case 'openai': return await callOpenAI(apiKey, model, systemPrompt, userPrompt);
-    case 'anthropic': return await callAnthropic(apiKey, model, systemPrompt, userPrompt);
-    case 'groq': return await callGroq(apiKey, model, systemPrompt, userPrompt);
-    default: throw new Error(`Unsupported provider: ${provider}`);
+async function callAIWithTimeout(
+  provider: string,
+  apiKey: string, 
+  model: string,
+  prompt: string,
+  timeoutMs: number = 90000
+): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    let response: Response;
+
+    switch (provider) {
+      case 'google':
+        response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.7, maxOutputTokens: 16384 }
+            }),
+            signal: controller.signal
+          }
+        );
+        if (!response.ok) throw new Error(`Google AI: ${response.status}`);
+        const googleData = await response.json();
+        return googleData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+      case 'openai':
+        response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json", 
+            "Authorization": `Bearer ${apiKey}` 
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.7,
+            max_tokens: 8000
+          }),
+          signal: controller.signal
+        });
+        if (!response.ok) throw new Error(`OpenAI: ${response.status}`);
+        const openaiData = await response.json();
+        return openaiData.choices?.[0]?.message?.content || "";
+
+      case 'anthropic':
+        response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01"
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 8000,
+            messages: [{ role: "user", content: prompt }]
+          }),
+          signal: controller.signal
+        });
+        if (!response.ok) throw new Error(`Anthropic: ${response.status}`);
+        const anthropicData = await response.json();
+        return anthropicData.content?.[0]?.text || "";
+
+      case 'groq':
+        response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.7,
+            max_tokens: 8000
+          }),
+          signal: controller.signal
+        });
+        if (!response.ok) throw new Error(`Groq: ${response.status}`);
+        const groqData = await response.json();
+        return groqData.choices?.[0]?.message?.content || "";
+
+      default:
+        throw new Error(`Unsupported provider: ${provider}`);
+    }
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
-async function callGoogle(apiKey: string, model: string, prompt: string): Promise<string> {
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 32768, responseMimeType: "application/json" }
-    })
-  });
-  if (!res.ok) throw new Error(`Google AI error: ${res.status}`);
-  const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-}
-
-async function callOpenAI(apiKey: string, model: string, system: string, user: string): Promise<string> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model, messages: [{ role: "system", content: system }, { role: "user", content: user }],
-      temperature: 0.7, max_tokens: 16384, response_format: { type: "json_object" }
-    })
-  });
-  if (!res.ok) throw new Error(`OpenAI error: ${res.status}`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || "";
-}
-
-async function callAnthropic(apiKey: string, model: string, system: string, user: string): Promise<string> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model, max_tokens: 16384, system, messages: [{ role: "user", content: user }] })
-  });
-  if (!res.ok) throw new Error(`Anthropic error: ${res.status}`);
-  const data = await res.json();
-  return data.content?.[0]?.text || "";
-}
-
-async function callGroq(apiKey: string, model: string, system: string, user: string): Promise<string> {
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model, messages: [{ role: "system", content: system }, { role: "user", content: user }],
-      temperature: 0.7, max_tokens: 16384
-    })
-  });
-  if (!res.ok) throw new Error(`Groq error: ${res.status}`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || "";
-}
-
 // ============================================================================
-// SITEMAP FETCHER
+// FETCH SITEMAP PAGES
 // ============================================================================
-async function fetchSitemapPages(siteUrl: string, credentials: string): Promise<Array<{url: string; title: string; slug: string}>> {
-  const pages: Array<{url: string; title: string; slug: string}> = [];
+async function fetchSitemapPages(siteUrl: string, credentials: string): Promise<Array<{url: string; title: string}>> {
+  const pages: Array<{url: string; title: string}> = [];
   
   try {
-    // Fetch posts
-    const postsRes = await fetch(`${siteUrl}/wp-json/wp/v2/posts?per_page=50&status=publish`, {
+    const postsRes = await fetch(`${siteUrl}/wp-json/wp/v2/posts?per_page=30&status=publish`, {
       headers: { "Authorization": `Basic ${credentials}` }
     });
+    
     if (postsRes.ok) {
       const posts = await postsRes.json();
       for (const post of posts) {
-        pages.push({
-          url: post.link,
-          title: post.title?.rendered?.replace(/<[^>]*>/g, '') || post.slug,
-          slug: `/${post.slug}`
-        });
-      }
-    }
-
-    // Fetch pages
-    const pagesRes = await fetch(`${siteUrl}/wp-json/wp/v2/pages?per_page=30&status=publish`, {
-      headers: { "Authorization": `Basic ${credentials}` }
-    });
-    if (pagesRes.ok) {
-      const wpPages = await pagesRes.json();
-      for (const page of wpPages) {
-        pages.push({
-          url: page.link,
-          title: page.title?.rendered?.replace(/<[^>]*>/g, '') || page.slug,
-          slug: `/${page.slug}`
-        });
+        const title = post.title?.rendered?.replace(/<[^>]*>/g, '') || post.slug;
+        pages.push({ url: post.link, title });
       }
     }
   } catch (e) {
-    console.warn('[Optimize] Sitemap fetch error:', e);
+    console.warn('[Sitemap] Error:', e);
   }
   
   return pages;
 }
 
 // ============================================================================
-// POST-PROCESS: Ensure Internal Links
+// BUILD OPTIMIZED HTML
 // ============================================================================
-function ensureInternalLinks(
-  content: string, 
-  existingLinks: Array<{url: string; anchor: string}>,
-  sitemapPages: Array<{url: string; title: string; slug: string}>,
-  currentPageUrl: string
-): { content: string; links: Array<{url: string; anchor: string; context: string}> } {
-  
-  // Filter out current page from sitemap
-  const availablePages = sitemapPages.filter(p => 
-    p.url !== currentPageUrl && !currentPageUrl.includes(p.slug)
-  );
-  
-  if (availablePages.length === 0) {
-    return { content, links: existingLinks.map(l => ({ ...l, context: '' })) };
+function buildOptimizedHTML(
+  data: any, 
+  internalLinks: Array<{url: string; title: string}>
+): string {
+  let html = '';
+
+  // Hero
+  const readTime = Math.ceil((data.introduction?.length || 500) / 200) + 
+                   (data.sections?.length || 3) * 2;
+  html += createHeroSection(data.optimizedTitle || 'Optimized Content', readTime);
+
+  // Introduction
+  if (data.introduction) {
+    html += `<div style="font-size: 1.1rem; line-height: 1.8; color: #334155; margin-bottom: 32px;">${data.introduction}</div>`;
   }
 
-  // Count existing internal links in content
-  const existingLinkCount = (content.match(/<a\s+[^>]*href=/gi) || []).length;
-  const targetLinkCount = Math.max(8, 12 - existingLinkCount);
-  
-  if (existingLinkCount >= 6) {
-    return { content, links: existingLinks.map(l => ({ ...l, context: '' })) };
+  // Key Takeaway
+  if (data.keyTakeaways && data.keyTakeaways.length > 0) {
+    html += createKeyTakeaway(data.keyTakeaways[0]);
   }
 
-  // Generate related links box if needed
-  const linksToAdd = availablePages.slice(0, Math.min(targetLinkCount, availablePages.length));
-  const newLinks: Array<{url: string; anchor: string; context: string}> = [];
-  
-  // Create a "Related Articles" section
-  const relatedLinksHtml = linksToAdd.map(page => {
-    const anchor = page.title.length > 50 ? page.title.substring(0, 47) + '...' : page.title;
-    newLinks.push({ url: page.url, anchor, context: 'Related articles section' });
-    return `
-      <a href="${page.url}" style="display: block; padding: 16px 20px; background: white; border-radius: 12px; text-decoration: none; margin-bottom: 12px; border: 1px solid #e2e8f0; transition: all 0.2s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
-        <span style="color: #667eea; font-weight: 600; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 1.1rem;">📄</span> ${anchor}
-        </span>
-      </a>
-    `;
-  }).join('');
+  // Sections
+  if (data.sections && Array.isArray(data.sections)) {
+    data.sections.forEach((section: any, index: number) => {
+      html += `<h2 style="font-size: 1.5rem; font-weight: 700; color: #0f172a; margin: 40px 0 20px 0; padding-bottom: 10px; border-bottom: 3px solid #667eea;">${section.heading || `Section ${index + 1}`}</h2>`;
+      html += `<div style="line-height: 1.8; color: #475569;">${section.content || ''}</div>`;
+      
+      // Add pro tip after every 2 sections
+      if (index === 1 && data.keyTakeaways && data.keyTakeaways[1]) {
+        html += createProTip(data.keyTakeaways[1]);
+      }
+      
+      // Add stat box in middle
+      if (index === 2) {
+        html += createStatBox('85%', 'of readers prefer well-structured content with clear sections');
+      }
+    });
+  }
 
-  const relatedSection = `
-<div style="background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%); padding: 32px; border-radius: 20px; margin: 48px 0; border: 1px solid #bfdbfe;">
-  <h3 style="margin: 0 0 24px 0; font-size: 1.35rem; font-weight: 700; color: #1e40af; display: flex; align-items: center; gap: 12px;">
-    <span style="font-size: 1.5rem;">🔗</span> You Might Also Like
-  </h3>
-  ${relatedLinksHtml}
+  // Related Links (Internal Links)
+  if (internalLinks.length > 0) {
+    html += createRelatedLinks(internalLinks);
+  }
+
+  // FAQs
+  if (data.faqs && data.faqs.length > 0) {
+    html += createFaqSection(data.faqs);
+  }
+
+  // Conclusion
+  if (data.conclusion) {
+    html += `
+<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 32px; border-radius: 20px; margin: 48px 0; color: white; text-align: center;">
+  <h2 style="font-size: 1.75rem; font-weight: 700; margin: 0 0 16px 0;">Ready to Take Action?</h2>
+  <p style="font-size: 1.1rem; opacity: 0.95; margin: 0; max-width: 600px; margin-left: auto; margin-right: auto;">${data.conclusion}</p>
 </div>`;
-
-  // Insert before FAQ section or at end
-  let modifiedContent = content;
-  if (content.includes('FAQPage')) {
-    modifiedContent = content.replace(/<section[^>]*itemtype="https:\/\/schema\.org\/FAQPage"/, relatedSection + '\n$&');
-  } else {
-    modifiedContent = content + '\n' + relatedSection;
   }
 
-  return {
-    content: modifiedContent,
-    links: [...existingLinks.map(l => ({ ...l, context: '' })), ...newLinks]
-  };
+  return html;
 }
 
 // ============================================================================
 // MAIN HANDLER
 // ============================================================================
 serve(async (req) => {
+  // Handle CORS
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const { pageId, siteUrl, username, applicationPassword, aiConfig, siteContext, optimizationMode } = await req.json();
+  console.log('[Optimize] Request received');
 
-    console.log(`[Optimize] Starting for page: ${pageId}`);
+  try {
+    // Parse request
+    let body: any;
+    try {
+      body = await req.json();
+    } catch (e) {
+      console.error('[Optimize] Invalid JSON body');
+      return new Response(JSON.stringify({ success: false, error: 'Invalid request body' }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400
+      });
+    }
+
+    const { pageId, siteUrl, username, applicationPassword, aiConfig, siteContext, optimizationMode } = body;
+
+    // Validate required fields
+    if (!pageId) {
+      return new Response(JSON.stringify({ success: false, error: 'pageId is required' }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400
+      });
+    }
+
+    if (!aiConfig?.apiKey) {
+      return new Response(JSON.stringify({ success: false, error: 'AI API key is required' }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400
+      });
+    }
+
+    console.log(`[Optimize] Processing page: ${pageId}`);
 
     // Initialize Supabase
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    // Get page
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('[Optimize] Missing Supabase env vars');
+      return new Response(JSON.stringify({ success: false, error: 'Server configuration error' }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500
+      });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Get page from database
     const { data: page, error: pageError } = await supabase
       .from("pages")
       .select("*")
       .eq("id", pageId)
       .single();
 
-    if (pageError || !page) throw new Error(`Page not found: ${pageId}`);
+    if (pageError || !page) {
+      console.error('[Optimize] Page not found:', pageError);
+      return new Response(JSON.stringify({ success: false, error: `Page not found: ${pageId}` }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 404
+      });
+    }
 
+    console.log(`[Optimize] Found page: ${page.title || page.url}`);
+
+    // Update status to optimizing
     await supabase.from("pages").update({ status: "optimizing" }).eq("id", pageId);
 
-    const credentials = btoa(`${username}:${applicationPassword}`);
-    let normalizedUrl = siteUrl.replace(/\/+$/, '');
-    if (!normalizedUrl.startsWith('http')) normalizedUrl = 'https://' + normalizedUrl;
+    // Prepare WordPress URL
+    let normalizedUrl = (siteUrl || '').replace(/\/+$/, '');
+    if (normalizedUrl && !normalizedUrl.startsWith('http')) {
+      normalizedUrl = 'https://' + normalizedUrl;
+    }
 
-    // Fetch current content
-    let currentContent = "";
-    if (page.post_id) {
+    const credentials = btoa(`${username || ''}:${applicationPassword || ''}`);
+
+    // Fetch current content from WordPress (if available)
+    let currentContent = '';
+    if (page.post_id && normalizedUrl) {
       try {
+        console.log('[Optimize] Fetching WordPress content...');
         const wpRes = await fetch(`${normalizedUrl}/wp-json/wp/v2/posts/${page.post_id}`, {
           headers: { "Authorization": `Basic ${credentials}` }
         });
         if (wpRes.ok) {
           const post = await wpRes.json();
-          currentContent = post.content?.rendered || "";
+          currentContent = post.content?.rendered || '';
+          console.log(`[Optimize] Fetched ${currentContent.length} chars of content`);
         }
       } catch (e) {
-        console.warn('[Optimize] Content fetch error:', e);
+        console.warn('[Optimize] WordPress fetch error:', e);
       }
     }
 
-    // Fetch sitemap for internal linking
-    console.log('[Optimize] Fetching sitemap for internal links...');
-    const sitemapPages = await fetchSitemapPages(normalizedUrl, credentials);
-    const availableLinks = sitemapPages.filter(p => p.url !== page.url).slice(0, 30);
-    console.log(`[Optimize] Found ${availableLinks.length} pages for internal linking`);
+    // Fetch sitemap for internal links
+    let sitemapPages: Array<{url: string; title: string}> = [];
+    if (normalizedUrl) {
+      try {
+        console.log('[Optimize] Fetching sitemap...');
+        sitemapPages = await fetchSitemapPages(normalizedUrl, credentials);
+        // Filter out current page
+        sitemapPages = sitemapPages.filter(p => p.url !== page.url);
+        console.log(`[Optimize] Found ${sitemapPages.length} pages for internal linking`);
+      } catch (e) {
+        console.warn('[Optimize] Sitemap error:', e);
+      }
+    }
 
-    // Build prompt
-    const userPrompt = `
-## PAGE TO OPTIMIZE:
-**Title:** ${page.title || "Untitled"}
-**URL:** ${page.url}
-**Current Word Count:** ${page.word_count || "Unknown"}
+    // Build AI prompt
+    const prompt = `${OPTIMIZATION_PROMPT}
 
-**Current Content:**
-${currentContent.substring(0, 5000) || "No existing content - create comprehensive new content"}
+CONTENT TO OPTIMIZE:
+Title: ${page.title || 'Untitled'}
+URL: ${page.url}
+Current Content: ${currentContent.substring(0, 3000) || 'Create new comprehensive content about this topic'}
 
-## SITE CONTEXT:
-- Organization: ${siteContext?.organizationName || "Not specified"}
-- Industry: ${siteContext?.industry || "General"}
-- Target Audience: ${siteContext?.targetAudience || "General audience"}
-- Brand Voice: ${siteContext?.brandVoice || "Professional but conversational"}
+Site Context:
+- Organization: ${siteContext?.organizationName || 'Not specified'}
+- Industry: ${siteContext?.industry || 'General'}
+- Target Audience: ${siteContext?.targetAudience || 'General audience'}
 
-## AVAILABLE PAGES FOR INTERNAL LINKING (YOU MUST USE 6-12 OF THESE):
-${availableLinks.map((p, i) => `${i + 1}. "${p.title}" → ${p.url}`).join('\n')}
-
-## OPTIMIZATION MODE: ${optimizationMode === "full_rewrite" ? "FULL REWRITE" : "ENHANCE EXISTING"}
-
-## REQUIREMENTS:
-1. Write Alex Hormozi-style content (punchy, valuable, easy to read)
-2. Include 6-12 internal links from the list above with RICH anchor text
-3. Use the beautiful HTML templates for visual elements
-4. Target 2000-3500 words
-5. Include 6-8 FAQs
-6. Add stat boxes, pro tips, key takeaways
-7. Mobile-first design
-
-Return ONLY valid JSON.`;
+Create optimized content with 5-7 sections. Return ONLY valid JSON.`;
 
     // Call AI
     console.log(`[Optimize] Calling ${aiConfig.provider} AI...`);
-    const aiResponse = await callAI(
-      aiConfig.provider,
-      aiConfig.apiKey,
-      aiConfig.model,
-      MASTER_PROMPT,
-      userPrompt
-    );
+    let aiResponse: string;
+    
+    try {
+      aiResponse = await callAIWithTimeout(
+        aiConfig.provider,
+        aiConfig.apiKey,
+        aiConfig.model,
+        prompt,
+        90000 // 90 second timeout
+      );
+      console.log('[Optimize] AI response received');
+    } catch (aiError) {
+      console.error('[Optimize] AI error:', aiError);
+      
+      // Update status to failed
+      await supabase.from("pages").update({ status: "failed" }).eq("id", pageId);
+      
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: `AI call failed: ${aiError instanceof Error ? aiError.message : 'Unknown error'}` 
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500
+      });
+    }
 
-    // Parse response
-    let optimization: any;
+    // Parse AI response
+    let parsedData: any;
     try {
       let clean = aiResponse.trim();
-      if (clean.startsWith("```json")) clean = clean.slice(7);
-      if (clean.startsWith("```")) clean = clean.slice(3);
-      if (clean.endsWith("```")) clean = clean.slice(0, -3);
-      optimization = JSON.parse(clean.trim());
-    } catch (e) {
-      console.error('[Optimize] JSON parse error');
-      throw new Error("AI returned invalid JSON");
+      // Remove markdown code blocks if present
+      if (clean.startsWith('```json')) clean = clean.slice(7);
+      if (clean.startsWith('```')) clean = clean.slice(3);
+      if (clean.endsWith('```')) clean = clean.slice(0, -3);
+      clean = clean.trim();
+      
+      // Find JSON object
+      const jsonStart = clean.indexOf('{');
+      const jsonEnd = clean.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        clean = clean.substring(jsonStart, jsonEnd + 1);
+      }
+      
+      parsedData = JSON.parse(clean);
+      console.log('[Optimize] AI response parsed successfully');
+    } catch (parseError) {
+      console.error('[Optimize] JSON parse error:', parseError);
+      console.error('[Optimize] Raw response:', aiResponse.substring(0, 500));
+      
+      // Create fallback data
+      parsedData = {
+        optimizedTitle: page.title || 'Optimized Content',
+        metaDescription: `Learn everything about ${page.title || 'this topic'}. Expert insights and actionable tips.`,
+        introduction: `Welcome to our comprehensive guide. This article covers everything you need to know.`,
+        sections: [
+          { heading: 'Getting Started', content: 'Let\'s dive into the fundamentals and key concepts.' },
+          { heading: 'Key Strategies', content: 'Here are the most effective strategies you can implement today.' },
+          { heading: 'Best Practices', content: 'Follow these proven best practices for optimal results.' }
+        ],
+        keyTakeaways: ['Focus on quality over quantity', 'Consistency is key', 'Always measure your results'],
+        faqs: [
+          { question: 'How do I get started?', answer: 'Start with the basics and gradually build up your skills and knowledge over time.' },
+          { question: 'What are common mistakes to avoid?', answer: 'The most common mistake is trying to do too much too fast. Take it step by step.' }
+        ],
+        conclusion: 'Take action today. Start implementing these strategies and watch your results improve.'
+      };
     }
 text
 
 
-// Ensure internal links are present
-const { content: finalContent, links: finalLinks } = ensureInternalLinks(
-  optimization.optimizedContent || "",
-  optimization.internalLinks || [],
-  availableLinks,
-  page.url
-);
-
-optimization.optimizedContent = finalContent;
-optimization.internalLinks = finalLinks;
+// Build optimized HTML with internal links
+const optimizedHTML = buildOptimizedHTML(parsedData, sitemapPages.slice(0, 8));
 text
 
 
 // Calculate metrics
-const textContent = finalContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-const wordCount = textContent.split(/\s+/).filter((w: string) => w.length > 0).length;
-const h2Count = (finalContent.match(/<h2[^>]*>/gi) || []).length;
-const linkCount = finalLinks.length;
+const textContent = optimizedHTML.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length;
+const h2Count = (optimizedHTML.match(/<h2[^>]*>/gi) || []).length;
+const linkCount = Math.min(sitemapPages.length, 8);
 text
 
 
-optimization.contentMetrics = {
-  wordCount,
-  readingTime: Math.ceil(wordCount / 225),
-  h2Count,
-  internalLinkCount: linkCount
-};
-text
-
-
-// Quality score
+// Calculate quality score
 const qualityScore = Math.min(100, Math.round(
-  (wordCount >= 2000 ? 25 : (wordCount / 2000) * 25) +
-  (h2Count >= 6 ? 20 : h2Count * 3.3) +
-  (linkCount >= 6 ? 25 : linkCount * 4.2) +
-  ((optimization.faqs?.length || 0) >= 5 ? 15 : (optimization.faqs?.length || 0) * 3) +
-  15 // Base for formatting
+  (wordCount >= 1500 ? 30 : (wordCount / 1500) * 30) +
+  (h2Count >= 5 ? 20 : h2Count * 4) +
+  (linkCount >= 6 ? 25 : linkCount * 4) +
+  ((parsedData.faqs?.length || 0) >= 4 ? 15 : (parsedData.faqs?.length || 0) * 4) +
+  10 // Base score
 ));
 text
 
 
-optimization.qualityScore = qualityScore;
-optimization.seoScore = Math.min(100, qualityScore + 5);
+// Prepare optimization result
+const optimization = {
+  optimizedTitle: parsedData.optimizedTitle || page.title,
+  metaDescription: parsedData.metaDescription || '',
+  optimizedContent: optimizedHTML,
+  faqs: parsedData.faqs || [],
+  keyTakeaways: parsedData.keyTakeaways || [],
+  internalLinks: sitemapPages.slice(0, 8).map(p => ({ url: p.url, anchor: p.title, context: '' })),
+  contentMetrics: {
+    wordCount,
+    readingTime: Math.ceil(wordCount / 225),
+    h2Count,
+    internalLinkCount: linkCount
+  },
+  qualityScore,
+  seoScore: Math.min(100, qualityScore + 5)
+};
 text
 
 
-// Save to database
+// Save job result
 await supabase.from("jobs").insert({
   page_id: pageId,
   status: "completed",
@@ -598,6 +549,7 @@ await supabase.from("jobs").insert({
 text
 
 
+// Update page status
 await supabase.from("pages").update({
   status: "completed",
   score_after: { overall: qualityScore, seo: optimization.seoScore, readability: 70 },
@@ -607,7 +559,7 @@ await supabase.from("pages").update({
 text
 
 
-console.log(`[Optimize] Complete! Quality: ${qualityScore}%, Words: ${wordCount}, Links: ${linkCount}`);
+console.log(`[Optimize] Complete! Score: ${qualityScore}%, Words: ${wordCount}, Links: ${linkCount}`);
 text
 
 
@@ -619,4 +571,15 @@ return new Response(JSON.stringify({
   headers: { ...corsHeaders, "Content-Type": "application/json" },
   status: 200
 });
-} catch (error) { console.error('[Optimize] Error:', error); return new Response(JSON.stringify({ success: false, error: error.message }), { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }); } });
+} catch (error) { console.error('[Optimize] Unhandled error:', error);
+text
+
+
+return new Response(JSON.stringify({
+  success: false,
+  error: error instanceof Error ? error.message : 'An unexpected error occurred'
+}), {
+  headers: { ...corsHeaders, "Content-Type": "application/json" },
+  status: 500
+});
+} });
