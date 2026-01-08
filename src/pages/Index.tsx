@@ -1,163 +1,140 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Settings, Rocket, BarChart3, Sparkles, CloudOff, CheckCircle2, Globe, Bot } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { isSupabaseConfigured } from '@/lib/supabase';
-import { useConfigStore } from '@/stores/config-store';
+// src/pages/Index.tsx
+// Main page with all features integrated
 
-// Config components
+import { useState } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  LayoutDashboard, 
+  Settings, 
+  Rocket, 
+  Search, 
+  FileText,
+  BarChart3,
+  Layers
+} from 'lucide-react';
+
+// Existing imports
+import { DashboardMetrics } from '@/components/strategy/DashboardMetrics';
 import { WordPressConnection } from '@/components/config/WordPressConnection';
 import { AIProviderConfig } from '@/components/config/AIProviderConfig';
 import { SiteContext } from '@/components/config/SiteContext';
 import { OptimizationModeConfig } from '@/components/config/OptimizationModeConfig';
 import { AdvancedSettings } from '@/components/config/AdvancedSettings';
-
-// Strategy components
-import { DashboardMetrics } from '@/components/strategy/DashboardMetrics';
 import { SitemapCrawler } from '@/components/strategy/SitemapCrawler';
+import { PageQueue } from '@/components/strategy/PageQueue';
 import { QuickOptimize } from '@/components/strategy/QuickOptimize';
 import { BulkMode } from '@/components/strategy/BulkMode';
-import { PageQueue } from '@/components/strategy/PageQueue';
+import { OptimizationProgress } from '@/components/strategy/OptimizationProgress';
 import { ActivityLog } from '@/components/strategy/ActivityLog';
 import { SerpIntelligence } from '@/components/strategy/SerpIntelligence';
 
-// Analytics components
-import { SessionStats } from '@/components/analytics/SessionStats';
-import { ScoreDistribution } from '@/components/analytics/ScoreDistribution';
-import { EnhancementBreakdown } from '@/components/analytics/EnhancementBreakdown';
-import { RecentJobs } from '@/components/analytics/RecentJobs';
+// NEW IMPORTS
+import { ContentBriefGenerator } from '@/components/strategy/ContentBriefGenerator';
+import { SerpAnalyzer } from '@/components/strategy/SerpAnalyzer';
+import { ContentStrategyDashboard } from '@/components/strategy/ContentStrategyDashboard';
 
-// Connection status component
-function ConnectionStatus() {
-  const { wordpress } = useConfigStore();
-  const backendConfigured = isSupabaseConfigured();
-  const wpConnected = wordpress.isConnected;
-
-  if (!backendConfigured) {
-    return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-warning/10 border border-warning/30">
-        <CloudOff className="w-3.5 h-3.5 text-warning" />
-        <span className="text-xs font-medium text-warning">Backend Not Connected</span>
-      </div>
-    );
-  }
-
-  if (!wpConnected) {
-    return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-border/50">
-        <Globe className="w-3.5 h-3.5 text-muted-foreground" />
-        <span className="text-xs font-medium text-muted-foreground">WordPress Not Connected</span>
-      </div>
-    );
-  }
+export default function Index() {
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-success/10 border border-success/30">
-      <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-      <span className="text-xs font-medium text-success">Connected</span>
-    </div>
-  );
-}
-
-const Index = () => {
-  const [activeTab, setActiveTab] = useState('config');
-
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border/50 bg-card/50 backdrop-blur-xl sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+      <div className="container mx-auto px-4 py-6 max-w-7xl">
+        {/* Header */}
+        <header className="mb-8">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-gradient-to-br from-primary/20 to-info/20 border border-primary/30">
-                <Sparkles className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold tracking-tight">
-                  WP Optimizer <span className="text-gradient">Pro Ultra</span>
-                </h1>
-                <p className="text-xs text-muted-foreground">Enterprise AI Content Platform</p>
-              </div>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                Page Perfector
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                Enterprise-Grade SEO Content Optimization
+              </p>
             </div>
-            <ConnectionStatus />
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-6">
+        {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 bg-muted/50 p-1">
-            <TabsTrigger value="config" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <Settings className="w-4 h-4" />
-              Configuration
+          <TabsList className="grid grid-cols-6 w-full max-w-4xl">
+            <TabsTrigger value="dashboard" className="gap-2">
+              <LayoutDashboard className="w-4 h-4" />
+              Dashboard
             </TabsTrigger>
-            <TabsTrigger value="strategy" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <TabsTrigger value="optimize" className="gap-2">
               <Rocket className="w-4 h-4" />
-              Content Strategy
+              Optimize
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <BarChart3 className="w-4 h-4" />
-              Analytics
+            <TabsTrigger value="strategy" className="gap-2">
+              <Layers className="w-4 h-4" />
+              Strategy
+            </TabsTrigger>
+            <TabsTrigger value="serp" className="gap-2">
+              <Search className="w-4 h-4" />
+              SERP
+            </TabsTrigger>
+            <TabsTrigger value="briefs" className="gap-2">
+              <FileText className="w-4 h-4" />
+              Briefs
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="gap-2">
+              <Settings className="w-4 h-4" />
+              Settings
             </TabsTrigger>
           </TabsList>
 
-          {/* Configuration Tab */}
-          <TabsContent value="config" className="space-y-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-6"
-            >
-              <WordPressConnection />
-              <AIProviderConfig />
-              <SiteContext />
-              <OptimizationModeConfig />
-              <AdvancedSettings />
-            </motion.div>
+          {/* Dashboard Tab */}
+          <TabsContent value="dashboard" className="space-y-6">
+            <DashboardMetrics />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <OptimizationProgress />
+              <ActivityLog />
+            </div>
           </TabsContent>
 
-          {/* Content Strategy Tab */}
-          <TabsContent value="strategy" className="space-y-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-6"
-            >
-              <DashboardMetrics />
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Optimize Tab */}
+          <TabsContent value="optimize" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-6">
                 <SitemapCrawler />
+                <PageQueue />
+              </div>
+              <div className="space-y-6">
                 <QuickOptimize />
                 <BulkMode />
               </div>
-
-              <SerpIntelligence />
-
-              <PageQueue />
-              <ActivityLog />
-            </motion.div>
+            </div>
           </TabsContent>
 
-          {/* Analytics Tab */}
-          <TabsContent value="analytics" className="space-y-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-6"
-            >
-              <SessionStats />
-              <ScoreDistribution />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <EnhancementBreakdown />
-                <RecentJobs />
-              </div>
-            </motion.div>
+          {/* Strategy Tab - NEW */}
+          <TabsContent value="strategy" className="space-y-6">
+            <ContentStrategyDashboard />
+          </TabsContent>
+
+          {/* SERP Tab - NEW/ENHANCED */}
+          <TabsContent value="serp" className="space-y-6">
+            <SerpAnalyzer />
+            <SerpIntelligence />
+          </TabsContent>
+
+          {/* Briefs Tab - NEW */}
+          <TabsContent value="briefs" className="space-y-6">
+            <ContentBriefGenerator />
+          </TabsContent>
+
+          {/* Settings Tab */}
+          <TabsContent value="settings" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <WordPressConnection />
+              <AIProviderConfig />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <SiteContext />
+              <OptimizationModeConfig />
+            </div>
+            <AdvancedSettings />
           </TabsContent>
         </Tabs>
-      </main>
+      </div>
     </div>
   );
-};
-
-export default Index;
+}
