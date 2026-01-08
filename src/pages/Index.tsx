@@ -47,6 +47,7 @@ import { ActivityLog } from '@/components/strategy/ActivityLog';
 import { SerpIntelligence } from '@/components/strategy/SerpIntelligence';
 import { OptimizationProgress } from '@/components/strategy/OptimizationProgress';
 
+
 // Analytics components
 import { SessionStats } from '@/components/analytics/SessionStats';
 import { ScoreDistribution } from '@/components/analytics/ScoreDistribution';
