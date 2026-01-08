@@ -1,9 +1,10 @@
 // src/hooks/index.ts
-// Barrel export for hooks
+// Only export hooks that ACTUALLY exist with correct names
 
-export { useContentBrief } from './use-content-brief';
-export { useContentOptimization } from './use-content-optimization';
-export { useSerpAnalysis } from './use-serp-analysis';
-export { useMobile } from './use-mobile';
+export { useIsMobile } from './use-mobile';
 export { useToast } from './use-toast';
 
+// NOTE: Uncomment these when you create the files:
+// export { useContentBrief } from './use-content-brief';
+// export { useContentOptimization } from './use-content-optimization';
+// export { useSerpAnalysis } from './use-serp-analysis';
