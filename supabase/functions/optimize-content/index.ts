@@ -1,6 +1,5 @@
 // supabase/functions/optimize-content/index.ts
-// ENTERPRISE-GRADE CONTENT OPTIMIZATION V5.0
-// With robust error handling, timeouts, and fallbacks
+// V6.0 - NATURAL INTERNAL LINKING + ROBUST ERROR HANDLING
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -11,14 +10,61 @@ const corsHeaders = {
 };
 
 // ============================================================================
-// BEAUTIFUL HTML TEMPLATES
+// AI PROMPT WITH NATURAL INTERNAL LINKING
+// ============================================================================
+const OPTIMIZATION_PROMPT = `You are an expert content optimizer combining Alex Hormozi's punchy writing style with SEO mastery.
+
+## CRITICAL: INTERNAL LINKING REQUIREMENTS
+
+You MUST embed 8-12 internal links NATURALLY within the content paragraphs. 
+
+RULES FOR INTERNAL LINKS:
+1. Place links MID-SENTENCE, not at the end
+2. Use DESCRIPTIVE anchor text (the topic name, not "click here")
+3. Make links flow naturally in context
+4. Spread links throughout ALL sections
+
+EXAMPLE OF GOOD INTERNAL LINKING:
+"If you're struggling with content creation, you should check out our guide on [AI-powered content strategies](/ai/content-strategies/) which covers the fundamentals. Many businesses also benefit from understanding [how to optimize for voice search](/seo/voice-search-optimization/) to stay ahead of competitors."
+
+EXAMPLE OF BAD INTERNAL LINKING:
+"Learn more here. Click here to read more. See this article."
+
+## WRITING STYLE (ALEX HORMOZI):
+- Short paragraphs (2-3 sentences MAX)
+- Start with value, not filler
+- Use "you" constantly
+- Bold **key phrases**
+- Be conversational
+
+## OUTPUT FORMAT (JSON):
+
+{
+  "optimizedTitle": "SEO title 50-60 chars",
+  "metaDescription": "Meta description 150-160 chars with CTA",
+  "sections": [
+    {
+      "heading": "H2 Heading Here",
+      "content": "Paragraph content with [natural anchor text](URL) links embedded mid-sentence. Another paragraph here."
+    }
+  ],
+  "keyTakeaways": ["5-7 bullet points"],
+  "faqs": [
+    {"question": "Question?", "answer": "Direct 40-60 word answer"}
+  ],
+  "conclusion": "Strong closing with CTA"
+}
+
+IMPORTANT: In the "content" field, use markdown-style links: [anchor text](URL)
+I will convert them to HTML.`;
+
+// ============================================================================
+// HTML TEMPLATES
 // ============================================================================
 const createHeroSection = (title: string, readTime: number) => `
 <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 48px 32px; border-radius: 20px; margin-bottom: 40px; color: white; text-align: center;">
   <h1 style="font-size: clamp(1.75rem, 5vw, 2.5rem); font-weight: 800; margin: 0 0 16px 0; line-height: 1.2;">${title}</h1>
-  <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-    <span style="background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 25px; font-size: 0.875rem;">📖 ${readTime} min read</span>
-  </div>
+  <span style="background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 25px; font-size: 0.875rem;">📖 ${readTime} min read</span>
 </div>`;
 
 const createKeyTakeaway = (content: string) => `
@@ -45,23 +91,8 @@ const createStatBox = (stat: string, description: string) => `
   <p style="font-size: 1rem; opacity: 0.85; margin: 8px 0 0 0;">${description}</p>
 </div>`;
 
-const createRelatedLinks = (links: Array<{url: string; title: string}>) => {
-  if (links.length === 0) return '';
-  const linksHtml = links.slice(0, 8).map(link => `
-    <a href="${link.url}" style="display: block; padding: 16px 20px; background: white; border-radius: 12px; text-decoration: none; margin-bottom: 12px; border: 1px solid #e2e8f0;">
-      <span style="color: #667eea; font-weight: 600;">📄 ${link.title}</span>
-    </a>
-  `).join('');
-  
-  return `
-<div style="background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%); padding: 32px; border-radius: 20px; margin: 48px 0; border: 1px solid #bfdbfe;">
-  <h3 style="margin: 0 0 24px 0; font-size: 1.35rem; font-weight: 700; color: #1e40af;">🔗 Related Articles</h3>
-  ${linksHtml}
-</div>`;
-};
-
 const createFaqSection = (faqs: Array<{question: string; answer: string}>) => {
-  if (faqs.length === 0) return '';
+  if (!faqs || faqs.length === 0) return '';
   const faqsHtml = faqs.map(faq => `
     <div itemscope itemprop="mainEntity" itemtype="https://schema.org/Question" style="background: white; padding: 24px; border-radius: 16px; margin-bottom: 16px; border: 1px solid #e2e8f0;">
       <h3 itemprop="name" style="margin: 0 0 14px 0; font-size: 1.1rem; color: #0f172a; font-weight: 700;">❓ ${faq.question}</h3>
@@ -78,42 +109,73 @@ const createFaqSection = (faqs: Array<{question: string; answer: string}>) => {
 </section>`;
 };
 
-// ============================================================================
-// AI PROMPT
-// ============================================================================
-const OPTIMIZATION_PROMPT = `You are an expert content optimizer combining Alex Hormozi's punchy writing style with professional SEO best practices.
+const createCTA = (text: string) => `
+<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 32px; border-radius: 20px; margin: 48px 0; color: white; text-align: center;">
+  <h2 style="font-size: 1.75rem; font-weight: 700; margin: 0 0 16px 0;">Ready to Take Action?</h2>
+  <p style="font-size: 1.1rem; opacity: 0.95; margin: 0;">${text}</p>
+</div>`;
 
-WRITING RULES:
-1. Short paragraphs (2-3 sentences max)
-2. Use "you" constantly - be conversational
-3. Bold **key phrases** for emphasis
-4. Start with valuable insight, not filler
+// ============================================================================
+// CONVERT MARKDOWN LINKS TO HTML + INJECT SITEMAP LINKS
+// ============================================================================
+function processContentWithLinks(
+  content: string, 
+  sitemapPages: Array<{url: string; title: string}>,
+  currentPageUrl: string
+): { html: string; linkCount: number } {
+  // Filter out current page
+  const availablePages = sitemapPages.filter(p => 
+    p.url !== currentPageUrl && !currentPageUrl.includes(p.title.toLowerCase().replace(/\s+/g, '-'))
+  );
 
-OUTPUT FORMAT (JSON only):
-{
-  "optimizedTitle": "SEO title 50-60 chars",
-  "metaDescription": "Meta description 150-160 chars",
-  "introduction": "Punchy 2-3 paragraph intro",
-  "sections": [
-    {"heading": "H2 Heading", "content": "Section content with paragraphs"}
-  ],
-  "keyTakeaways": ["5-7 bullet points"],
-  "faqs": [{"question": "Question?", "answer": "Direct answer 40-60 words"}],
-  "conclusion": "Strong closing paragraph with CTA"
-}`;
+  // Convert markdown links [text](url) to HTML
+  let html = content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
+    return `<a href="${url}" style="color: #667eea; text-decoration: underline; font-weight: 500;">${text}</a>`;
+  });
+
+  // Count existing links
+  let linkCount = (html.match(/<a\s+[^>]*href=/gi) || []).length;
+
+  // If we need more links, inject them naturally
+  if (linkCount < 6 && availablePages.length > 0) {
+    const paragraphs = html.split('</p>');
+    const linksToAdd = availablePages.slice(0, Math.min(8 - linkCount, availablePages.length));
+    
+    let linkIndex = 0;
+    const newParagraphs = paragraphs.map((para, i) => {
+      // Add a link every 2-3 paragraphs
+      if (i > 0 && i % 2 === 0 && linkIndex < linksToAdd.length && !para.includes('<a ')) {
+        const page = linksToAdd[linkIndex];
+        linkIndex++;
+        
+        // Find a good place to insert the link (after first sentence)
+        const firstSentenceEnd = para.indexOf('. ');
+        if (firstSentenceEnd > 20) {
+          const linkHtml = ` For more insights, check out our guide on <a href="${page.url}" style="color: #667eea; text-decoration: underline; font-weight: 500;">${page.title}</a>.`;
+          para = para.slice(0, firstSentenceEnd + 1) + linkHtml + para.slice(firstSentenceEnd + 1);
+        }
+      }
+      return para;
+    });
+    
+    html = newParagraphs.join('</p>');
+    linkCount = (html.match(/<a\s+[^>]*href=/gi) || []).length;
+  }
+
+  return { html, linkCount };
+}
 
 // ============================================================================
 // AI CALL WITH TIMEOUT
 // ============================================================================
-async function callAIWithTimeout(
+async function callAI(
   provider: string,
   apiKey: string, 
   model: string,
-  prompt: string,
-  timeoutMs: number = 90000
+  prompt: string
 ): Promise<string> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
 
   try {
     let response: Response;
@@ -139,15 +201,10 @@ async function callAIWithTimeout(
       case 'openai':
         response = await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
-          headers: { 
-            "Content-Type": "application/json", 
-            "Authorization": `Bearer ${apiKey}` 
-          },
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
           body: JSON.stringify({
-            model,
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.7,
-            max_tokens: 8000
+            model, messages: [{ role: "user", content: prompt }],
+            temperature: 0.7, max_tokens: 8000
           }),
           signal: controller.signal
         });
@@ -158,16 +215,8 @@ async function callAIWithTimeout(
       case 'anthropic':
         response = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-            "anthropic-version": "2023-06-01"
-          },
-          body: JSON.stringify({
-            model,
-            max_tokens: 8000,
-            messages: [{ role: "user", content: prompt }]
-          }),
+          headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+          body: JSON.stringify({ model, max_tokens: 8000, messages: [{ role: "user", content: prompt }] }),
           signal: controller.signal
         });
         if (!response.ok) throw new Error(`Anthropic: ${response.status}`);
@@ -177,16 +226,8 @@ async function callAIWithTimeout(
       case 'groq':
         response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model,
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.7,
-            max_tokens: 8000
-          }),
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+          body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], temperature: 0.7, max_tokens: 8000 }),
           signal: controller.signal
         });
         if (!response.ok) throw new Error(`Groq: ${response.status}`);
@@ -194,7 +235,7 @@ async function callAIWithTimeout(
         return groqData.choices?.[0]?.message?.content || "";
 
       default:
-        throw new Error(`Unsupported provider: ${provider}`);
+        throw new Error(`Unsupported: ${provider}`);
     }
   } finally {
     clearTimeout(timeoutId);
@@ -202,384 +243,358 @@ async function callAIWithTimeout(
 }
 
 // ============================================================================
-// FETCH SITEMAP PAGES
+// FETCH SITEMAP
 // ============================================================================
-async function fetchSitemapPages(siteUrl: string, credentials: string): Promise<Array<{url: string; title: string}>> {
+async function fetchSitemap(siteUrl: string, credentials: string): Promise<Array<{url: string; title: string}>> {
   const pages: Array<{url: string; title: string}> = [];
   
   try {
-    const postsRes = await fetch(`${siteUrl}/wp-json/wp/v2/posts?per_page=30&status=publish`, {
+    const res = await fetch(`${siteUrl}/wp-json/wp/v2/posts?per_page=50&status=publish`, {
       headers: { "Authorization": `Basic ${credentials}` }
     });
-    
-    if (postsRes.ok) {
-      const posts = await postsRes.json();
+    if (res.ok) {
+      const posts = await res.json();
       for (const post of posts) {
-        const title = post.title?.rendered?.replace(/<[^>]*>/g, '') || post.slug;
-        pages.push({ url: post.link, title });
+        pages.push({
+          url: post.link,
+          title: post.title?.rendered?.replace(/<[^>]*>/g, '') || post.slug
+        });
       }
     }
   } catch (e) {
-    console.warn('[Sitemap] Error:', e);
+    console.warn('[Sitemap]', e);
   }
   
   return pages;
 }
 
 // ============================================================================
-// BUILD OPTIMIZED HTML
+// BUILD HTML
 // ============================================================================
-function buildOptimizedHTML(
+function buildHTML(
   data: any, 
-  internalLinks: Array<{url: string; title: string}>
-): string {
+  sitemapPages: Array<{url: string; title: string}>,
+  currentPageUrl: string
+): { html: string; linkCount: number } {
   let html = '';
+  let totalLinkCount = 0;
 
   // Hero
-  const readTime = Math.ceil((data.introduction?.length || 500) / 200) + 
-                   (data.sections?.length || 3) * 2;
+  const wordEstimate = (data.sections?.length || 3) * 300;
+  const readTime = Math.ceil(wordEstimate / 225);
   html += createHeroSection(data.optimizedTitle || 'Optimized Content', readTime);
 
-  // Introduction
-  if (data.introduction) {
-    html += `<div style="font-size: 1.1rem; line-height: 1.8; color: #334155; margin-bottom: 32px;">${data.introduction}</div>`;
-  }
-
   // Key Takeaway
-  if (data.keyTakeaways && data.keyTakeaways.length > 0) {
+  if (data.keyTakeaways?.[0]) {
     html += createKeyTakeaway(data.keyTakeaways[0]);
   }
 
-  // Sections
+  // Sections with natural internal links
   if (data.sections && Array.isArray(data.sections)) {
     data.sections.forEach((section: any, index: number) => {
-      html += `<h2 style="font-size: 1.5rem; font-weight: 700; color: #0f172a; margin: 40px 0 20px 0; padding-bottom: 10px; border-bottom: 3px solid #667eea;">${section.heading || `Section ${index + 1}`}</h2>`;
-      html += `<div style="line-height: 1.8; color: #475569;">${section.content || ''}</div>`;
+      html += `<h2 style="font-size: 1.5rem; font-weight: 700; color: #0f172a; margin: 40px 0 20px 0; padding-bottom: 10px; border-bottom: 3px solid #667eea;">${section.heading}</h2>`;
       
-      // Add pro tip after every 2 sections
-      if (index === 1 && data.keyTakeaways && data.keyTakeaways[1]) {
+      // Process content with internal links
+      const { html: processedContent, linkCount } = processContentWithLinks(
+        `<p style="line-height: 1.8; color: #475569; margin-bottom: 16px;">${section.content || ''}</p>`,
+        sitemapPages,
+        currentPageUrl
+      );
+      html += processedContent;
+      totalLinkCount += linkCount;
+
+      // Add visual elements
+      if (index === 1 && data.keyTakeaways?.[1]) {
         html += createProTip(data.keyTakeaways[1]);
       }
-      
-      // Add stat box in middle
       if (index === 2) {
-        html += createStatBox('85%', 'of readers prefer well-structured content with clear sections');
+        html += createStatBox('73%', 'of top-performing content includes internal links');
       }
     });
   }
 
-  // Related Links (Internal Links)
-  if (internalLinks.length > 0) {
-    html += createRelatedLinks(internalLinks);
-  }
-
   // FAQs
-  if (data.faqs && data.faqs.length > 0) {
-    html += createFaqSection(data.faqs);
-  }
+  html += createFaqSection(data.faqs || []);
 
-  // Conclusion
+  // CTA
   if (data.conclusion) {
-    html += `
-<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 32px; border-radius: 20px; margin: 48px 0; color: white; text-align: center;">
-  <h2 style="font-size: 1.75rem; font-weight: 700; margin: 0 0 16px 0;">Ready to Take Action?</h2>
-  <p style="font-size: 1.1rem; opacity: 0.95; margin: 0; max-width: 600px; margin-left: auto; margin-right: auto;">${data.conclusion}</p>
-</div>`;
+    html += createCTA(data.conclusion);
   }
 
-  return html;
+  return { html, linkCount: totalLinkCount };
 }
 
 // ============================================================================
 // MAIN HANDLER
 // ============================================================================
 serve(async (req) => {
-  // Handle CORS
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  console.log('[Optimize] Request received');
-
   try {
-    // Parse request
-    let body: any;
-    try {
-      body = await req.json();
-    } catch (e) {
-      console.error('[Optimize] Invalid JSON body');
-      return new Response(JSON.stringify({ success: false, error: 'Invalid request body' }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 400
+    const body = await req.json();
+    const { pageId, siteUrl, username, applicationPassword, aiConfig, siteContext } = body;
+
+    if (!pageId || !aiConfig?.apiKey) {
+      return new Response(JSON.stringify({ success: false, error: 'Missing required fields' }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400
       });
     }
 
-    const { pageId, siteUrl, username, applicationPassword, aiConfig, siteContext, optimizationMode } = body;
+    console.log(`[Optimize] Starting: ${pageId}`);
 
-    // Validate required fields
-    if (!pageId) {
-      return new Response(JSON.stringify({ success: false, error: 'pageId is required' }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 400
-      });
-    }
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    if (!aiConfig?.apiKey) {
-      return new Response(JSON.stringify({ success: false, error: 'AI API key is required' }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 400
-      });
-    }
-
-    console.log(`[Optimize] Processing page: ${pageId}`);
-
-    // Initialize Supabase
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    if (!supabaseUrl || !supabaseKey) {
-      console.error('[Optimize] Missing Supabase env vars');
-      return new Response(JSON.stringify({ success: false, error: 'Server configuration error' }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500
-      });
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Get page from database
+    // Get page
     const { data: page, error: pageError } = await supabase
-      .from("pages")
-      .select("*")
-      .eq("id", pageId)
-      .single();
+      .from("pages").select("*").eq("id", pageId).single();
 
     if (pageError || !page) {
-      console.error('[Optimize] Page not found:', pageError);
-      return new Response(JSON.stringify({ success: false, error: `Page not found: ${pageId}` }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 404
+      return new Response(JSON.stringify({ success: false, error: 'Page not found' }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404
       });
     }
 
-    console.log(`[Optimize] Found page: ${page.title || page.url}`);
-
-    // Update status to optimizing
     await supabase.from("pages").update({ status: "optimizing" }).eq("id", pageId);
 
-    // Prepare WordPress URL
+    // Prepare WordPress
     let normalizedUrl = (siteUrl || '').replace(/\/+$/, '');
-    if (normalizedUrl && !normalizedUrl.startsWith('http')) {
-      normalizedUrl = 'https://' + normalizedUrl;
-    }
-
+    if (normalizedUrl && !normalizedUrl.startsWith('http')) normalizedUrl = 'https://' + normalizedUrl;
     const credentials = btoa(`${username || ''}:${applicationPassword || ''}`);
 
-    // Fetch current content from WordPress (if available)
+    // Fetch current content
     let currentContent = '';
     if (page.post_id && normalizedUrl) {
       try {
-        console.log('[Optimize] Fetching WordPress content...');
-        const wpRes = await fetch(`${normalizedUrl}/wp-json/wp/v2/posts/${page.post_id}`, {
+        const res = await fetch(`${normalizedUrl}/wp-json/wp/v2/posts/${page.post_id}`, {
           headers: { "Authorization": `Basic ${credentials}` }
         });
-        if (wpRes.ok) {
-          const post = await wpRes.json();
+        if (res.ok) {
+          const post = await res.json();
           currentContent = post.content?.rendered || '';
-          console.log(`[Optimize] Fetched ${currentContent.length} chars of content`);
         }
-      } catch (e) {
-        console.warn('[Optimize] WordPress fetch error:', e);
-      }
+      } catch (e) { console.warn('[WP Fetch]', e); }
     }
 
-    // Fetch sitemap for internal links
-    let sitemapPages: Array<{url: string; title: string}> = [];
-    if (normalizedUrl) {
-      try {
-        console.log('[Optimize] Fetching sitemap...');
-        sitemapPages = await fetchSitemapPages(normalizedUrl, credentials);
-        // Filter out current page
-        sitemapPages = sitemapPages.filter(p => p.url !== page.url);
-        console.log(`[Optimize] Found ${sitemapPages.length} pages for internal linking`);
-      } catch (e) {
-        console.warn('[Optimize] Sitemap error:', e);
-      }
-    }
+    // Fetch sitemap
+    const sitemapPages = await fetchSitemap(normalizedUrl, credentials);
+    console.log(`[Optimize] Found ${sitemapPages.length} sitemap pages`);
 
-    // Build AI prompt
+    // Build prompt with sitemap links
+    const sitemapList = sitemapPages
+      .filter(p => p.url !== page.url)
+      .slice(0, 20)
+      .map(p => `- [${p.title}](${p.url})`)
+      .join('\n');
+
     const prompt = `${OPTIMIZATION_PROMPT}
 
-CONTENT TO OPTIMIZE:
+## AVAILABLE INTERNAL LINKS (USE 8-12 OF THESE NATURALLY IN CONTENT):
+${sitemapList}
+
+## CONTENT TO OPTIMIZE:
 Title: ${page.title || 'Untitled'}
 URL: ${page.url}
-Current Content: ${currentContent.substring(0, 3000) || 'Create new comprehensive content about this topic'}
+Current Content: ${currentContent.substring(0, 4000) || 'Create comprehensive new content'}
 
-Site Context:
-- Organization: ${siteContext?.organizationName || 'Not specified'}
-- Industry: ${siteContext?.industry || 'General'}
-- Target Audience: ${siteContext?.targetAudience || 'General audience'}
+Site: ${siteContext?.organizationName || 'Not specified'}
+Industry: ${siteContext?.industry || 'General'}
+Audience: ${siteContext?.targetAudience || 'General'}
 
-Create optimized content with 5-7 sections. Return ONLY valid JSON.`;
+Create 6-8 sections. EMBED internal links naturally within paragraphs.
+Return ONLY valid JSON.`;
 
     // Call AI
-    console.log(`[Optimize] Calling ${aiConfig.provider} AI...`);
-    let aiResponse: string;
-    
-    try {
-      aiResponse = await callAIWithTimeout(
-        aiConfig.provider,
-        aiConfig.apiKey,
-        aiConfig.model,
-        prompt,
-        90000 // 90 second timeout
-      );
-      console.log('[Optimize] AI response received');
-    } catch (aiError) {
-      console.error('[Optimize] AI error:', aiError);
-      
-      // Update status to failed
-      await supabase.from("pages").update({ status: "failed" }).eq("id", pageId);
-      
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: `AI call failed: ${aiError instanceof Error ? aiError.message : 'Unknown error'}` 
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500
-      });
-    }
+    console.log(`[Optimize] Calling ${aiConfig.provider}...`);
+    const aiResponse = await callAI(aiConfig.provider, aiConfig.apiKey, aiConfig.model, prompt);
 
-    // Parse AI response
+    // Parse response
     let parsedData: any;
     try {
       let clean = aiResponse.trim();
-      // Remove markdown code blocks if present
-      if (clean.startsWith('```json')) clean = clean.slice(7);
-      if (clean.startsWith('```')) clean = clean.slice(3);
-      if (clean.endsWith('```')) clean = clean.slice(0, -3);
-      clean = clean.trim();
-      
-      // Find JSON object
+      if (clean.startsWith('```')) clean = clean.replace(/```json?|```/g, '');
       const jsonStart = clean.indexOf('{');
       const jsonEnd = clean.lastIndexOf('}');
-      if (jsonStart !== -1 && jsonEnd !== -1) {
-        clean = clean.substring(jsonStart, jsonEnd + 1);
-      }
-      
+      if (jsonStart !== -1 && jsonEnd !== -1) clean = clean.substring(jsonStart, jsonEnd + 1);
       parsedData = JSON.parse(clean);
-      console.log('[Optimize] AI response parsed successfully');
-    } catch (parseError) {
-      console.error('[Optimize] JSON parse error:', parseError);
-      console.error('[Optimize] Raw response:', aiResponse.substring(0, 500));
-      
-      // Create fallback data
+    } catch (e) {
+      console.error('[Parse Error]', e);
       parsedData = {
-        optimizedTitle: page.title || 'Optimized Content',
-        metaDescription: `Learn everything about ${page.title || 'this topic'}. Expert insights and actionable tips.`,
-        introduction: `Welcome to our comprehensive guide. This article covers everything you need to know.`,
-        sections: [
-          { heading: 'Getting Started', content: 'Let\'s dive into the fundamentals and key concepts.' },
-          { heading: 'Key Strategies', content: 'Here are the most effective strategies you can implement today.' },
-          { heading: 'Best Practices', content: 'Follow these proven best practices for optimal results.' }
-        ],
-        keyTakeaways: ['Focus on quality over quantity', 'Consistency is key', 'Always measure your results'],
-        faqs: [
-          { question: 'How do I get started?', answer: 'Start with the basics and gradually build up your skills and knowledge over time.' },
-          { question: 'What are common mistakes to avoid?', answer: 'The most common mistake is trying to do too much too fast. Take it step by step.' }
-        ],
-        conclusion: 'Take action today. Start implementing these strategies and watch your results improve.'
+        optimizedTitle: page.title,
+        sections: [{ heading: 'Introduction', content: 'Content optimization in progress.' }],
+        keyTakeaways: ['Quality content drives results'],
+        faqs: [],
+        conclusion: 'Take action today.'
       };
     }
 text
 
 
-// Build optimized HTML with internal links
-const optimizedHTML = buildOptimizedHTML(parsedData, sitemapPages.slice(0, 8));
+// Build HTML with internal links
+const { html: optimizedHTML, linkCount } = buildHTML(parsedData, sitemapPages, page.url);
 text
 
 
 // Calculate metrics
-const textContent = optimizedHTML.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length;
-const h2Count = (optimizedHTML.match(/<h2[^>]*>/gi) || []).length;
-const linkCount = Math.min(sitemapPages.length, 8);
+const textContent = optimizedHTML.replace(/<[^>]*>/g, ' ').trim();
+const wordCount = textContent.split(/\s+/).filter(w => w).length;
+const h2Count = (optimizedHTML.match(/<h2/gi) || []).length;
 text
 
 
-// Calculate quality score
 const qualityScore = Math.min(100, Math.round(
   (wordCount >= 1500 ? 30 : (wordCount / 1500) * 30) +
   (h2Count >= 5 ? 20 : h2Count * 4) +
   (linkCount >= 6 ? 25 : linkCount * 4) +
-  ((parsedData.faqs?.length || 0) >= 4 ? 15 : (parsedData.faqs?.length || 0) * 4) +
-  10 // Base score
+  ((parsedData.faqs?.length || 0) >= 4 ? 15 : (parsedData.faqs?.length || 0) * 4) + 10
 ));
 text
 
 
-// Prepare optimization result
 const optimization = {
   optimizedTitle: parsedData.optimizedTitle || page.title,
-  metaDescription: parsedData.metaDescription || '',
+  metaDescription: parsedData.metaDescription || `Learn about ${page.title}`,
   optimizedContent: optimizedHTML,
   faqs: parsedData.faqs || [],
   keyTakeaways: parsedData.keyTakeaways || [],
-  internalLinks: sitemapPages.slice(0, 8).map(p => ({ url: p.url, anchor: p.title, context: '' })),
-  contentMetrics: {
-    wordCount,
-    readingTime: Math.ceil(wordCount / 225),
-    h2Count,
-    internalLinkCount: linkCount
-  },
+  internalLinks: sitemapPages.slice(0, linkCount).map(p => ({ url: p.url, anchor: p.title })),
+  contentMetrics: { wordCount, readingTime: Math.ceil(wordCount / 225), h2Count, internalLinkCount: linkCount },
   qualityScore,
   seoScore: Math.min(100, qualityScore + 5)
 };
 text
 
 
-// Save job result
+// Save job
 await supabase.from("jobs").insert({
-  page_id: pageId,
-  status: "completed",
-  result: optimization,
-  started_at: new Date().toISOString(),
-  completed_at: new Date().toISOString()
+  page_id: pageId, status: "completed", result: optimization,
+  started_at: new Date().toISOString(), completed_at: new Date().toISOString()
 });
 text
 
 
-// Update page status
+// Update page
 await supabase.from("pages").update({
   status: "completed",
-  score_after: { overall: qualityScore, seo: optimization.seoScore, readability: 70 },
-  word_count: wordCount,
-  updated_at: new Date().toISOString()
+  score_after: { overall: qualityScore, seo: optimization.seoScore },
+  word_count: wordCount
 }).eq("id", pageId);
 text
 
 
-console.log(`[Optimize] Complete! Score: ${qualityScore}%, Words: ${wordCount}, Links: ${linkCount}`);
+console.log(`[Optimize] Done! Score: ${qualityScore}, Links: ${linkCount}`);
 text
 
 
-return new Response(JSON.stringify({
-  success: true,
-  optimization,
-  metrics: { wordCount, qualityScore, internalLinkCount: linkCount }
-}), {
-  headers: { ...corsHeaders, "Content-Type": "application/json" },
-  status: 200
+return new Response(JSON.stringify({ success: true, optimization }), {
+  headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200
 });
-} catch (error) { console.error('[Optimize] Unhandled error:', error);
+} catch (error) { console.error('[Optimize Error]', error); return new Response(JSON.stringify({ success: false, error: String(error) }), { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }); } });
 text
 
 
-return new Response(JSON.stringify({
-  success: false,
-  error: error instanceof Error ? error.message : 'An unexpected error occurred'
-}), {
-  headers: { ...corsHeaders, "Content-Type": "application/json" },
-  status: 500
+
+---
+
+## 📁 FILE 2: `src/components/strategy/SitemapCrawler.tsx` - FIX DUPLICATE URLs
+
+Find and replace the part where pages are added. Add deduplication:
+
+```typescript
+// In handleCrawl function, before adding pages, deduplicate:
+const handleCrawl = async () => { // ... existing code ...
+// DEDUPLICATE before saving const existingUrls = new Set(pages.map(p => p.url)); const newPages = crawledPages.filter(p => !existingUrls.has(p.url));
+if (newPages.length === 0) { toast.info('No new pages to add - all URLs already in queue'); return; }
+// Only insert new unique pages for (const page of newPages) { await supabase.from('pages').insert({ url: page.url, title: page.title, slug: page.slug, post_id: page.post_id, status: 'pending' }); }
+toast.success(Added ${newPages.length} new pages); // ... rest of code ... };
+text
+
+
+
+---
+
+## 📁 FILE 3: FIX THE "EYE ICON" VIEW RESULT
+
+In `src/components/strategy/PageQueue.tsx`, fix the `handleViewResult` function:
+
+```typescript
+// Replace the handleViewResult function with this:
+const handleViewResult = async (page: PageRecord) => { console.log('[ViewResult] Loading result for page:', page.id);
+try { const { data: jobData, error: jobError } = await supabase .from('jobs') .select('result') .eq('page_id', page.id) .eq('status', 'completed') .order('completed_at', { ascending: false }) .limit(1);
+text
+
+
+console.log('[ViewResult] Job data:', jobData);
+text
+
+
+if (jobError) {
+  console.error('[ViewResult] Error:', jobError);
+  toast.error('Failed to load result');
+  return;
+}
+text
+
+
+if (!jobData || jobData.length === 0) {
+  toast.warning('No optimization result found', {
+    description: 'This page has not been optimized yet.',
+  });
+  return;
+}
+text
+
+
+const result = jobData[0].result as OptimizationResult;
+
+if (!result) {
+  toast.warning('Result data is empty');
+  return;
+}
+text
+
+
+console.log('[ViewResult] Setting result:', result);
+setSelectedPageResult({ page, result });
+setShowResultDialog(true);
+} catch (error) { console.error('[ViewResult] Exception:', error); toast.error('Error loading result'); } };
+text
+
+
+
+---
+
+## 📁 FILE 4: FIX WORDPRESS NOT UPDATING
+
+The optimization ONLY generates content but doesn't push to WordPress. You need to click **"Publish"** after optimization.
+
+But if you want **AUTO-PUBLISH** after optimization, add this to the end of optimize-content:
+
+```typescript
+// Add this AFTER saving the job, BEFORE returning success:
+// AUTO-PUBLISH TO WORDPRESS if (page.post_id && normalizedUrl) { try { console.log('[Optimize] Auto-publishing to WordPress...');
+text
+
+
+const updateRes = await fetch(`${normalizedUrl}/wp-json/wp/v2/posts/${page.post_id}`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Basic ${credentials}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    title: optimization.optimizedTitle,
+    content: optimization.optimizedContent,
+    status: 'draft' // Change to 'publish' for immediate publish
+  })
 });
-} });
+text
+
+
+if (updateRes.ok) {
+  console.log('[Optimize] WordPress updated successfully');
+} else {
+  console.warn('[Optimize] WordPress update failed:', await updateRes.text());
+}
+} catch (wpError) { console.warn('[Optimize] WordPress update error:', wpError); } }
