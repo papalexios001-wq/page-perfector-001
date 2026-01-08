@@ -1,298 +1,170 @@
-import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, Check, AlertCircle, Zap, FileSearch, Brain, Shield, Upload } from 'lucide-react';
+// src/components/strategy/OptimizationProgress.tsx
+// SIMPLIFIED TYPE-SAFE VERSION
+
+import { useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
+import {
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  AlertTriangle,
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  useProgressStore,
+  OPTIMIZATION_STAGES,
+  formatDuration,
+} from '@/stores/progress-store';
 import { cn } from '@/lib/utils';
 
-export interface OptimizationStep {
-  id: string;
-  label: string;
-  description: string;
-  icon: React.ReactNode;
-  status: 'pending' | 'active' | 'completed' | 'error';
-  duration?: number; // Expected duration in ms
-}
+export function OptimizationProgress() {
+  const {
+    isActive,
+    currentPageTitle,
+    currentStage,
+    currentStageIndex,
+    overallProgress,
+    elapsedTimeMs,
+    estimatedTimeRemainingMs,
+    error,
+    tick,
+    resetJob,
+  } = useProgressStore();
 
-interface OptimizationProgressProps {
-  isActive: boolean;
-  currentStep: number;
-  steps: OptimizationStep[];
-  pageTitle?: string;
-  onTimeout?: () => void;
-  timeoutMs?: number;
-}
+  const tickInterval = useRef<NodeJS.Timeout | null>(null);
 
-const DEFAULT_STEPS: OptimizationStep[] = [
-  {
-    id: 'validate',
-    label: 'Validating Connection',
-    description: 'Checking WordPress API access...',
-    icon: <Shield className="w-4 h-4" />,
-    status: 'pending',
-    duration: 2000,
-  },
-  {
-    id: 'fetch',
-    label: 'Fetching Content',
-    description: 'Retrieving page content from WordPress...',
-    icon: <FileSearch className="w-4 h-4" />,
-    status: 'pending',
-    duration: 5000,
-  },
-  {
-    id: 'analyze',
-    label: 'AI Analysis',
-    description: 'Analyzing content with AI models...',
-    icon: <Brain className="w-4 h-4" />,
-    status: 'pending',
-    duration: 30000,
-  },
-  {
-    id: 'optimize',
-    label: 'Generating Optimizations',
-    description: 'Creating SEO-optimized content...',
-    icon: <Zap className="w-4 h-4" />,
-    status: 'pending',
-    duration: 10000,
-  },
-  {
-    id: 'save',
-    label: 'Saving Results',
-    description: 'Storing optimization in database...',
-    icon: <Upload className="w-4 h-4" />,
-    status: 'pending',
-    duration: 2000,
-  },
-];
-
-export function OptimizationProgress({ 
-  isActive, 
-  currentStep, 
-  steps = DEFAULT_STEPS,
-  pageTitle,
-  onTimeout,
-  timeoutMs = 90000,
-}: OptimizationProgressProps) {
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [estimatedTotal, setEstimatedTotal] = useState(0);
-  const startTimeRef = useRef<number | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Calculate total estimated duration
-  useEffect(() => {
-    const total = steps.reduce((sum, step) => sum + (step.duration || 5000), 0);
-    setEstimatedTotal(total);
-  }, [steps]);
-
-  // Timer for elapsed time
   useEffect(() => {
     if (isActive) {
-      startTimeRef.current = Date.now();
-      setElapsedTime(0);
-      
-      const interval = setInterval(() => {
-        if (startTimeRef.current) {
-          setElapsedTime(Date.now() - startTimeRef.current);
-        }
-      }, 100);
-
-      // Setup timeout
-      timeoutRef.current = setTimeout(() => {
-        if (onTimeout) {
-          onTimeout();
-        }
-      }, timeoutMs);
-
-      return () => {
-        clearInterval(interval);
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-        }
-      };
-    } else {
-      startTimeRef.current = null;
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+      tickInterval.current = setInterval(tick, 1000);
+    } else if (tickInterval.current) {
+      clearInterval(tickInterval.current);
+      tickInterval.current = null;
     }
-  }, [isActive, onTimeout, timeoutMs]);
+    return () => {
+      if (tickInterval.current) clearInterval(tickInterval.current);
+    };
+  }, [isActive, tick]);
 
-  // Calculate progress based on step and elapsed time
-  const calculateProgress = (): number => {
-    if (!isActive || currentStep < 0) return 0;
-    
-    let completedDuration = 0;
-    for (let i = 0; i < currentStep && i < steps.length; i++) {
-      completedDuration += steps[i].duration || 5000;
-    }
-    
-    const currentStepDuration = steps[currentStep]?.duration || 5000;
-    const stepProgress = Math.min(elapsedTime / currentStepDuration, 0.95);
-    
-    const totalProgress = (completedDuration + (currentStepDuration * stepProgress)) / estimatedTotal;
-    return Math.min(totalProgress * 100, 95); // Never show 100% until actually complete
-  };
+  if (currentStage === 'idle') return null;
 
-  const formatTime = (ms: number): string => {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    if (minutes > 0) {
-      return `${minutes}m ${remainingSeconds}s`;
-    }
-    return `${seconds}s`;
-  };
-
-  const getEstimatedRemaining = (): string => {
-    const progress = calculateProgress();
-    if (progress <= 0) return 'Calculating...';
-    
-    const estimatedTotalTime = (elapsedTime / progress) * 100;
-    const remaining = Math.max(0, estimatedTotalTime - elapsedTime);
-    
-    if (remaining < 1000) return 'Almost done...';
-    return `~${formatTime(remaining)} remaining`;
-  };
-
-  if (!isActive) return null;
-
-  const progress = calculateProgress();
-  const activeStep = steps[currentStep] || steps[0];
+  const isCompleted = currentStage === 'completed';
+  const isFailed = currentStage === 'failed';
+  const currentStageDef = OPTIMIZATION_STAGES.find(s => s.id === currentStage);
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        className="fixed bottom-6 right-6 z-50 w-96"
-      >
-        <div className="bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-4 border-b border-border">
+    <motion.div
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+    >
+      <Card className={cn(
+        'overflow-hidden',
+        isCompleted && 'border-green-500/50 bg-green-500/5',
+        isFailed && 'border-red-500/50 bg-red-500/5'
+      )}>
+        <CardHeader className="pb-2">
+          <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="relative">
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-                  className="text-primary"
-                >
-                  <Loader2 className="w-6 h-6" />
-                </motion.div>
-                <div className="absolute inset-0 bg-primary/20 rounded-full blur-md" />
+              <div className={cn(
+                'p-2 rounded-lg',
+                isCompleted && 'bg-green-500/20',
+                isFailed && 'bg-red-500/20',
+                !isCompleted && !isFailed && 'bg-primary/20'
+              )}>
+                {isCompleted ? (
+                  <CheckCircle2 className="w-5 h-5 text-green-500" />
+                ) : isFailed ? (
+                  <XCircle className="w-5 h-5 text-red-500" />
+                ) : (
+                  <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                )}
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-foreground truncate">
-                  Optimizing Content
-                </h3>
-                {pageTitle && (
-                  <p className="text-xs text-muted-foreground truncate">
-                    {pageTitle}
+              <div>
+                <CardTitle className="text-lg">
+                  {isCompleted ? 'Optimization Complete!' : isFailed ? 'Optimization Failed' : 'Optimizing...'}
+                </CardTitle>
+                {currentPageTitle && (
+                  <p className="text-sm text-muted-foreground truncate max-w-[300px]">
+                    {currentPageTitle}
                   </p>
                 )}
               </div>
-              <div className="text-right">
-                <span className="text-lg font-bold text-primary">
-                  {Math.round(progress)}%
-                </span>
-              </div>
             </div>
-          </div>
 
-          {/* Progress Bar */}
-          <div className="px-4 pt-4">
-            <div className="relative h-2 bg-muted rounded-full overflow-hidden">
-              <motion.div
-                className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary via-primary to-primary/80 rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${progress}%` }}
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-              />
-              <motion.div
-                className="absolute inset-y-0 left-0 bg-primary/30 rounded-full"
-                animate={{ 
-                  width: [`${progress}%`, `${Math.min(progress + 5, 100)}%`],
-                  opacity: [0.5, 0]
-                }}
-                transition={{ duration: 1, repeat: Infinity }}
-              />
-            </div>
-            <div className="flex justify-between mt-1 text-xs text-muted-foreground">
-              <span>{formatTime(elapsedTime)}</span>
-              <span>{getEstimatedRemaining()}</span>
-            </div>
-          </div>
-
-          {/* Current Step */}
-          <div className="p-4">
-            <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-              <div className={cn(
-                "p-2 rounded-lg",
-                activeStep.status === 'error' ? 'bg-destructive/10 text-destructive' : 'bg-primary/10 text-primary'
-              )}>
-                {activeStep.status === 'error' ? (
-                  <AlertCircle className="w-4 h-4" />
-                ) : (
-                  activeStep.icon
-                )}
+            <div className="text-right hidden sm:block">
+              <div className="flex items-center gap-2 text-sm">
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                <span className="font-mono">{formatDuration(elapsedTimeMs)}</span>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm text-foreground">
-                  {activeStep.label}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {activeStep.description}
-                </p>
-              </div>
-              {activeStep.status === 'completed' && (
-                <Check className="w-5 h-5 text-green-500" />
+              {isActive && estimatedTimeRemainingMs > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  ~{formatDuration(estimatedTimeRemainingMs)} remaining
+                </div>
               )}
             </div>
           </div>
+        </CardHeader>
 
-          {/* Step Indicators */}
-          <div className="px-4 pb-4">
-            <div className="flex gap-1">
-              {steps.map((step, index) => (
-                <motion.div
-                  key={step.id}
-                  className={cn(
-                    "flex-1 h-1 rounded-full transition-colors duration-300",
-                    index < currentStep ? 'bg-primary' :
-                    index === currentStep ? 'bg-primary/60' :
-                    'bg-muted'
-                  )}
-                  animate={index === currentStep ? {
-                    opacity: [0.6, 1, 0.6],
-                  } : {}}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                />
-              ))}
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium">Progress</span>
+              <span className={cn(
+                'font-mono font-bold',
+                isCompleted && 'text-green-500',
+                isFailed && 'text-red-500'
+              )}>
+                {Math.round(overallProgress)}%
+              </span>
             </div>
-            <p className="text-center text-xs text-muted-foreground mt-2">
-              Step {currentStep + 1} of {steps.length}
-            </p>
+            <Progress
+              value={overallProgress}
+              className={cn(
+                'h-2',
+                isCompleted && '[&>div]:bg-green-500',
+                isFailed && '[&>div]:bg-red-500'
+              )}
+            />
           </div>
 
-          {/* Timeout Warning */}
-          {elapsedTime > 60000 && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              className="px-4 pb-4"
-            >
-              <div className="flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-yellow-600 dark:text-yellow-500">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <p className="text-xs">
-                  Taking longer than expected. The operation will timeout at 90s.
-                </p>
+          {currentStageDef && !isCompleted && !isFailed && (
+            <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-sm">{currentStageDef.label}</span>
+                <Badge variant="secondary" className="text-xs">
+                  Step {currentStageIndex + 1}/{OPTIMIZATION_STAGES.length}
+                </Badge>
               </div>
-            </motion.div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {currentStageDef.description}
+              </p>
+            </div>
           )}
-        </div>
-      </motion.div>
-    </AnimatePresence>
+
+          {isFailed && error && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-medium text-red-500 text-sm">Error</span>
+                  <p className="text-xs text-muted-foreground">{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {(isCompleted || isFailed) && (
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={resetJob}>
+                Dismiss
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
   );
 }
-
-export { DEFAULT_STEPS };
